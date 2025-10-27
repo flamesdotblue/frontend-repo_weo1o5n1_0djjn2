@@ -1,94 +1,49 @@
-import { useEffect, useState } from 'react'
-import HeaderBar from './components/HeaderBar'
-import ChapterNavigator from './components/ChapterNavigator'
-import VerseLearning from './components/VerseLearning'
-import ChatbotPanel from './components/ChatbotPanel'
+import { useMemo, useState } from 'react';
+import Spline from '@splinetool/react-spline';
+import HeaderBar from './components/HeaderBar';
+import ChapterNavigator from './components/ChapterNavigator';
+import VerseLearning from './components/VerseLearning';
+import ChatbotPanel from './components/ChatbotPanel';
 
-const API = import.meta.env.VITE_BACKEND_URL
+export default function App() {
+  const [query, setQuery] = useState('');
+  const [selection, setSelection] = useState(null);
 
-function App() {
-  const [theme, setTheme] = useState('light')
-  const [selected, setSelected] = useState(null)
-  const [daily, setDaily] = useState(null)
-  const [stats, setStats] = useState(null)
-
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark')
-  }, [theme])
-
-  const onSearch = async (q) => {
-    if (!q) return
-    const res = await fetch(`${API}/api/search?q=${encodeURIComponent(q)}`)
-    const data = await res.json()
-    if (data.results?.length) {
-      setSelected({ chapter: data.results[0].chapter, verse: data.results[0] })
-    }
-  }
-
-  const loadDaily = async () => {
-    const res = await fetch(`${API}/api/daily_verse`)
-    const data = await res.json()
-    setDaily(data)
-    setSelected({ chapter: data.chapter, verse: data })
-  }
-
-  const loadStats = async () => {
-    const res = await fetch(`${API}/api/stats`)
-    const data = await res.json()
-    setStats(data)
-  }
-  useEffect(() => { loadDaily(); loadStats() }, [])
+  // Responsive layout columns
+  const layoutCols = useMemo(() => 'grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)_360px]', []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-gray-950 dark:to-gray-900 text-gray-900 dark:text-gray-100">
-      <HeaderBar onSearch={onSearch} theme={theme} setTheme={setTheme} />
-      <main className="max-w-6xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white/70 dark:bg-gray-900/60 backdrop-blur rounded-xl border border-black/5 dark:border-white/10 p-4">
-            {daily && (
-              <div className="text-sm text-gray-600 dark:text-gray-300">
-                <div className="font-semibold text-emerald-700 dark:text-emerald-400">Daily verse</div>
-                <div className="text-lg mt-1">{daily.devanagari}</div>
-                <div className="text-sm mt-1">{daily.transliteration}</div>
-              </div>
-            )}
-          </div>
+    <div className="relative min-h-screen w-full bg-gradient-to-b from-emerald-50 to-white dark:from-[#0b1111] dark:to-black">
+      <div className="absolute inset-0">
+        <Spline scene="https://prod.spline.design/7rVn7R0U1w2m-Scene.splinecode" style={{ width: '100%', height: '100%' }} />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/70 via-white/60 to-white/80 dark:from-black/60 dark:via-black/70 dark:to-black/80" />
+      </div>
 
-          <VerseLearning selected={selected} />
-        </div>
-        <div className="space-y-6">
-          <ChapterNavigator onSelectVerse={setSelected} onDaily={loadDaily} />
+      <div className="relative z-10 max-w-7xl mx-auto px-3 md:px-6 pb-10">
+        <HeaderBar query={query} onQueryChange={setQuery} />
 
-          <div className="bg-white/70 dark:bg-gray-900/60 backdrop-blur rounded-xl border border-black/5 dark:border-white/10 p-4">
-            <h3 className="font-semibold mb-2">Learning stats</h3>
-            {stats ? (
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
-                  <div className="text-gray-500">Bookmarks</div>
-                  <div className="text-2xl font-semibold">{stats.bookmark_count}</div>
-                </div>
-                <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
-                  <div className="text-gray-500">Practiced</div>
-                  <div className="text-2xl font-semibold">{stats.progress_count}</div>
-                </div>
-                <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
-                  <div className="text-gray-500">Mastered</div>
-                  <div className="text-2xl font-semibold">{stats.mastered_count}</div>
-                </div>
-                <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
-                  <div className="text-gray-500">Avg score</div>
-                  <div className="text-2xl font-semibold">{stats.avg_score}%</div>
-                </div>
-              </div>
-            ) : <div className="text-sm text-gray-500">Loading...</div>}
-          </div>
+        <main className={`mt-6 grid ${layoutCols} gap-4 md:gap-6`}>
+          <section className="min-h-[360px] lg:min-h-[640px]">
+            <ChapterNavigator
+              query={query}
+              current={selection}
+              onPick={(sel) => setSelection(sel)}
+            />
+          </section>
 
-          <ChatbotPanel />
-        </div>
-      </main>
-      <footer className="py-8 text-center text-xs text-gray-500">Made with reverence • Learn, pronounce, reflect</footer>
+          <section className="min-h-[360px] lg:min-h-[640px]">
+            <VerseLearning selection={selection} />
+          </section>
+
+          <section className="min-h-[360px] lg:min-h-[640px]">
+            <ChatbotPanel />
+          </section>
+        </main>
+
+        <footer className="mt-8 text-center text-xs text-black/60 dark:text-white/60">
+          Built for mindful practice • Tap a verse, listen, then speak and get instant feedback
+        </footer>
+      </div>
     </div>
-  )
+  );
 }
-
-export default App
