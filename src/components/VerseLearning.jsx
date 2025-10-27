@@ -13,13 +13,16 @@ function similarity(a, b) {
 }
 
 export default function VerseLearning({ selection }) {
-  const [rate, setRate] = useState(0.9);
+  const [rate, setRate] = useState(0.95);
   const [loop, setLoop] = useState(false);
   const [listening, setListening] = useState(false);
   const [heard, setHeard] = useState('');
   const [score, setScore] = useState(0);
+  const [voiceReady, setVoiceReady] = useState(false);
+  const [preferredLang, setPreferredLang] = useState('en-IN');
   const recRef = useRef(null);
   const synthRef = useRef(null);
+  const voiceRef = useRef(null);
 
   const verse = selection?.verse;
 
@@ -29,16 +32,55 @@ export default function VerseLearning({ selection }) {
     return verse.tr.split(/\s*[|,]\s*/).filter(Boolean);
   }, [verse]);
 
+  // Initialize Speech Synthesis and pick an Indian accent voice if available
   useEffect(() => {
+    if (typeof window === 'undefined') return;
     synthRef.current = window.speechSynthesis || null;
+    if (!synthRef.current) return;
+
+    const pickVoice = () => {
+      const voices = synthRef.current.getVoices?.() || [];
+      if (!voices.length) return;
+      // Prefer Indian voices/languages
+      const byLangPriority = [
+        (v) => v.lang?.toLowerCase() === 'en-in',
+        (v) => v.lang?.toLowerCase() === 'hi-in',
+        (v) => v.lang?.toLowerCase()?.includes('in'),
+        (v) => /india|hindi|indian/i.test(v.name || ''),
+      ];
+      let chosen = null;
+      for (const test of byLangPriority) {
+        chosen = voices.find(test);
+        if (chosen) break;
+      }
+      if (!chosen) chosen = voices.find((v) => v.lang?.toLowerCase().startsWith('en')) || voices[0] || null;
+      voiceRef.current = chosen || null;
+      // Set preferred language for recognition based on chosen voice
+      const lang = (chosen?.lang || '').toLowerCase();
+      setPreferredLang(lang.includes('hi') ? 'hi-IN' : (lang.includes('en') ? 'en-IN' : 'en-IN'));
+      setVoiceReady(true);
+    };
+
+    // Some browsers need onvoiceschanged to fire before voices are available
+    if (synthRef.current.onvoiceschanged !== undefined) {
+      synthRef.current.onvoiceschanged = pickVoice;
+    }
+    // Try immediately as well
+    pickVoice();
+
+    return () => {
+      if (synthRef.current) synthRef.current.onvoiceschanged = null;
+    };
   }, []);
 
+  // Speech Recognition for live feedback (use Indian locale if available)
   useEffect(() => {
     if (!listening) return;
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
     if (!SR) return;
     const rec = new SR();
-    rec.lang = 'sa-IN';
+    // Sanskrit recognition has limited support; Hindi/English (India) are more widely available
+    rec.lang = preferredLang || 'en-IN';
     rec.continuous = true;
     rec.interimResults = true;
     rec.onresult = (e) => {
@@ -59,24 +101,35 @@ export default function VerseLearning({ selection }) {
     return () => {
       rec.stop();
     };
-  }, [listening, verse]);
+  }, [listening, verse, preferredLang]);
 
   const speak = (text) => {
     if (!synthRef.current) return;
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'sa-IN';
+    const chosen = voiceRef.current;
+    if (chosen) {
+      u.voice = chosen;
+      u.lang = chosen.lang;
+    } else {
+      // Fallback to Indian English
+      u.lang = 'en-IN';
+    }
     u.rate = rate;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(u);
+    try {
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    } catch (_) {
+      // no-op
+    }
   };
 
   useEffect(() => {
-    if (!loop || !verse) return;
+    if (!loop || !verse || !voiceReady) return;
     const id = setInterval(() => {
       speak(verse.tr);
-    }, Math.max(2000, 3500 / rate));
+    }, Math.max(2200, 3600 / rate));
     return () => clearInterval(id);
-  }, [loop, verse, rate]);
+  }, [loop, verse, rate, voiceReady]);
 
   if (!verse) {
     return (
@@ -98,7 +151,7 @@ export default function VerseLearning({ selection }) {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <button onClick={() => speak(verse.tr)} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500">
+        <button onClick={() => speak(verse.tr)} disabled={!voiceReady} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-60">
           <Volume2 className="w-4 h-4" /> Play
         </button>
         <button onClick={() => window.speechSynthesis?.cancel()} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-black/10 dark:bg-white/10 text-black dark:text-white">
@@ -109,7 +162,7 @@ export default function VerseLearning({ selection }) {
             type="range"
             min={0.6}
             max={1.4}
-            step={0.1}
+            step={0.05}
             value={rate}
             onChange={(e) => setRate(parseFloat(e.target.value))}
             className="ml-2 align-middle"
@@ -152,7 +205,7 @@ export default function VerseLearning({ selection }) {
           <div className="text-sm font-medium text-black dark:text-white mb-2">Phrase practice</div>
           <div className="flex flex-wrap gap-2">
             {phrases.map((p, i) => (
-              <button key={i} onClick={() => speak(p)} className="px-3 py-2 rounded-lg border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/5 hover:bg-emerald-100/50 dark:hover:bg-emerald-900/20">
+              <button key={i} onClick={() => speak(p)} disabled={!voiceReady} className="px-3 py-2 rounded-lg border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/5 hover:bg-emerald-100/50 dark:hover:bg-emerald-900/20 disabled:opacity-60">
                 {p}
               </button>
             ))}
